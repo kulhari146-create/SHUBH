@@ -3,6 +3,7 @@ from flask_cors import CORS
 from neo_api_client import NeoAPI
 import os
 import pyotp
+import re
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', os.urandom(24))
@@ -84,28 +85,74 @@ def login_step2():
 @app.route('/api/search', methods=['GET'])
 def search_scrip():
     session_id = request.args.get('session_id')
-    if session_id == 'mock':
-        return jsonify({'status': 'success', 'data': [{'pTrdSymbol': 'RELIANCE-EQ', 'pInstrmntName': 'RELIANCE INDUSTRIES', 'pExchSegmt': 'nse_cm', 'pScripCode': '2885'}]})
+    symbol_query = (request.args.get('symbol') or "").upper()
 
-    symbol = (request.args.get('symbol') or "").upper()
+    if session_id == 'mock':
+        mock_data = [
+            {'pTrdSymbol': 'RELIANCE-EQ', 'pInstrmntName': 'RELIANCE INDUSTRIES', 'pExchSegmt': 'nse_cm', 'pScripCode': '2885'},
+            {'pTrdSymbol': 'NIFTY2650821500CE', 'pInstrmntName': 'NIFTY 21500 CE', 'pExchSegmt': 'nse_fo', 'pScripCode': '54321'},
+            {'pTrdSymbol': 'NIFTY2650821500PE', 'pInstrmntName': 'NIFTY 21500 PE', 'pExchSegmt': 'nse_fo', 'pScripCode': '54322'},
+            {'pTrdSymbol': 'BANKNIFTY2650845000CE', 'pInstrmntName': 'BANKNIFTY 45000 CE', 'pExchSegmt': 'nse_fo', 'pScripCode': '54323'},
+            {'pTrdSymbol': 'NIFTY 50', 'pInstrmntName': 'NIFTY 50 INDEX', 'pExchSegmt': 'nse_cm', 'pScripCode': '1'}
+        ]
+        search_parts = symbol_query.split()
+        filtered = [r for r in mock_data if all(part in (str(r.get('pTrdSymbol','')) + " " + str(r.get('pInstrmntName',''))).upper() for part in search_parts)]
+        return jsonify({'status': 'success', 'data': filtered})
+
     client = get_client(session_id)
     if not client:
         return jsonify({'status': 'error', 'message': 'Invalid session'}), 401
 
     try:
+        search_parts = symbol_query.split()
+        if not search_parts:
+            return jsonify({'status': 'success', 'data': []})
+
+        # Try to extract base symbol for API search
+        # E.g. "NIFTY 21500 CE" -> "NIFTY"
+        # E.g. "NIFTY21500CE" -> "NIFTY"
+        alpha_match = re.match(r'^([A-Z]+)', symbol_query)
+        base_symbol = alpha_match.group(1) if alpha_match else search_parts[0]
+
         all_results = []
-        segments = ['nse_cm', 'nse_fo', 'bse_cm', 'bse_fo']
+        segments = ['nse_cm', 'nse_fo', 'bse_cm', 'bse_fo', 'cde_fo', 'mcx_fo']
+
         for segment in segments:
             try:
-                res = client.search_scrip(exchange_segment=segment, symbol=symbol)
+                # 1. Try searching with base symbol
+                res = client.search_scrip(exchange_segment=segment, symbol=base_symbol)
+                data = []
                 if isinstance(res, dict) and 'data' in res:
-                    all_results.extend(res['data'])
+                    data = res['data']
                 elif isinstance(res, list):
-                    all_results.extend(res)
+                    data = res
+
+                # 2. If nothing found, try with full query (sometimes works for stocks)
+                if not data and base_symbol != symbol_query:
+                    res2 = client.search_scrip(exchange_segment=segment, symbol=symbol_query)
+                    if isinstance(res2, dict) and 'data' in res2:
+                        data = res2['data']
+                    elif isinstance(res2, list):
+                        data = res2
+
+                # Locally filter for specific strikes/types/expiries
+                for item in data:
+                    text = (str(item.get('pTrdSymbol', '')) + " " + str(item.get('pInstrmntName', ''))).upper()
+                    if all(part in text for part in search_parts):
+                        all_results.append(item)
             except:
                 continue
 
-        return jsonify({'status': 'success', 'data': all_results})
+        # Deduplicate results by pScripCode
+        seen = set()
+        unique_results = []
+        for r in all_results:
+            code = r.get('pScripCode')
+            if code not in seen:
+                unique_results.append(r)
+                seen.add(code)
+
+        return jsonify({'status': 'success', 'data': unique_results[:50]})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 400
 
@@ -128,6 +175,8 @@ def get_quote():
 
         if isinstance(response, dict) and 'data' in response:
             response = response['data']
+            if isinstance(response, list) and len(response) > 0:
+                response = response[0]
         return jsonify({'status': 'success', 'data': response})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 400
@@ -137,7 +186,13 @@ def get_quotes():
     data = request.json
     session_id = data.get('session_id')
     if session_id == 'mock':
-        return jsonify({'status': 'success', 'data': [{'token': '2885', 'last_traded_price': '2500.00', 'net_change_percentage': '1.5'}]})
+        return jsonify({'status': 'success', 'data': [
+            {'token': '2885', 'last_traded_price': '2500.00', 'net_change_percentage': '1.5'},
+            {'token': '54321', 'last_traded_price': '150.00', 'net_change_percentage': '-2.3'},
+            {'token': '54322', 'last_traded_price': '145.50', 'net_change_percentage': '1.2'},
+            {'token': '54323', 'last_traded_price': '320.00', 'net_change_percentage': '0.5'},
+            {'token': '1', 'last_traded_price': '22000.00', 'net_change_percentage': '0.8'}
+        ]})
 
     instruments = data.get('instruments', [])
     client = get_client(session_id)
