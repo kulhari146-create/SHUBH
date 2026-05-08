@@ -5,7 +5,7 @@ import os
 import pyotp
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)
+app.secret_key = os.environ.get('SECRET_KEY', os.urandom(24))
 CORS(app)
 
 # --- CONFIGURATION (Enter your details here) ---
@@ -17,6 +17,11 @@ DEFAULT_TOTP_SECRET = ""
 # -----------------------------------------------
 
 clients = {}
+
+def get_client(session_id):
+    if session_id == 'mock':
+        return 'mock'
+    return clients.get(session_id, {}).get('client')
 
 @app.route('/api/config', methods=['GET'])
 def get_config():
@@ -37,7 +42,6 @@ def login_step1():
     if data.get('totp') == '000000':
         return jsonify({'status': 'success', 'session_id': 'mock'})
 
-    data = request.json
     mobile_number = data.get('mobile_number') or DEFAULT_MOBILE
     ucc = data.get('ucc') or DEFAULT_UCC
     consumer_key = data.get('consumer_key') or DEFAULT_CONSUMER_KEY
@@ -61,11 +65,10 @@ def login_step1():
 @app.route('/api/login/step2', methods=['POST'])
 def login_step2():
     data = request.json
-    if data.get('session_id') == 'mock':
+    session_id = data.get('session_id')
+    if session_id == 'mock':
         return jsonify({'status': 'success'})
 
-    data = request.json
-    session_id = data.get('session_id')
     mpin = data.get('mpin') or DEFAULT_MPIN
 
     if session_id not in clients:
@@ -80,18 +83,17 @@ def login_step2():
 
 @app.route('/api/search', methods=['GET'])
 def search_scrip():
-    if request.args.get('session_id') == 'mock':
+    session_id = request.args.get('session_id')
+    if session_id == 'mock':
         return jsonify({'status': 'success', 'data': [{'pTrdSymbol': 'RELIANCE-EQ', 'pInstrmntName': 'RELIANCE INDUSTRIES', 'pExchSegmt': 'nse_cm', 'pScripCode': '2885'}]})
 
-    session_id = request.args.get('session_id')
     symbol = (request.args.get('symbol') or "").upper()
-    if session_id not in clients:
+    client = get_client(session_id)
+    if not client:
         return jsonify({'status': 'error', 'message': 'Invalid session'}), 401
 
-    client = clients[session_id]['client']
     try:
         all_results = []
-        # Search in Equity and F&O
         segments = ['nse_cm', 'nse_fo', 'bse_cm', 'bse_fo']
         for segment in segments:
             try:
@@ -110,16 +112,17 @@ def search_scrip():
 @app.route('/api/quote', methods=['GET'])
 def get_quote():
     session_id = request.args.get('session_id')
+    if session_id == 'mock':
+        return jsonify({'status': 'success', 'data': {'last_traded_price': '2500.00', 'net_change_percentage': '1.5'}})
+
     token = request.args.get('token')
     exchange = (request.args.get('exchange') or 'nse_cm').lower()
-
-    if session_id not in clients:
+    client = get_client(session_id)
+    if not client:
         return jsonify({'status': 'error', 'message': 'Invalid session'}), 401
 
-    client = clients[session_id]['client']
     try:
         exchange = exchange.replace('cm', '_cm').replace('fo', '_fo').replace('__', '_')
-
         inst_tokens = [{"instrument_token": str(token), "exchange_segment": exchange}]
         response = client.quotes(instrument_tokens=inst_tokens)
 
@@ -133,12 +136,14 @@ def get_quote():
 def get_quotes():
     data = request.json
     session_id = data.get('session_id')
-    instruments = data.get('instruments', []) # List of {token, exchange}
+    if session_id == 'mock':
+        return jsonify({'status': 'success', 'data': [{'token': '2885', 'last_traded_price': '2500.00', 'net_change_percentage': '1.5'}]})
 
-    if session_id not in clients:
+    instruments = data.get('instruments', [])
+    client = get_client(session_id)
+    if not client:
         return jsonify({'status': 'error', 'message': 'Invalid session'}), 401
 
-    client = clients[session_id]['client']
     try:
         inst_tokens = []
         for inst in instruments:
@@ -159,10 +164,13 @@ def get_quotes():
 def place_order():
     data = request.json
     session_id = data.get('session_id')
-    if session_id not in clients:
+    if session_id == 'mock':
+        return jsonify({'status': 'success', 'data': {'order_id': 'MOCK123'}})
+
+    client = get_client(session_id)
+    if not client:
         return jsonify({'status': 'error', 'message': 'Invalid session'}), 401
 
-    client = clients[session_id]['client']
     try:
         exchange = (data.get('exchange_segment') or 'nse_cm').lower()
         exchange = exchange.replace('cm', '_cm').replace('fo', '_fo').replace('__', '_')
@@ -188,4 +196,4 @@ def place_order():
         return jsonify({'status': 'error', 'message': str(e)}), 400
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    app.run(debug=False, port=5000)
