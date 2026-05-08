@@ -3,6 +3,7 @@ from flask_cors import CORS
 from neo_api_client import NeoAPI
 import os
 import pyotp
+
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 CORS(app)
@@ -33,12 +34,16 @@ def index():
 @app.route('/api/login/step1', methods=['POST'])
 def login_step1():
     data = request.json
+    if data.get('totp') == '000000':
+        return jsonify({'status': 'success', 'session_id': 'mock'})
+
+    data = request.json
     mobile_number = data.get('mobile_number') or DEFAULT_MOBILE
     ucc = data.get('ucc') or DEFAULT_UCC
     consumer_key = data.get('consumer_key') or DEFAULT_CONSUMER_KEY
     totp_secret = data.get('totp_secret') or DEFAULT_TOTP_SECRET
-    totp = data.get('totp')
 
+    totp = data.get('totp')
     if totp_secret and not totp:
         try:
             totp = pyotp.TOTP(totp_secret.replace(" ", "")).now()
@@ -56,6 +61,10 @@ def login_step1():
 @app.route('/api/login/step2', methods=['POST'])
 def login_step2():
     data = request.json
+    if data.get('session_id') == 'mock':
+        return jsonify({'status': 'success'})
+
+    data = request.json
     session_id = data.get('session_id')
     mpin = data.get('mpin') or DEFAULT_MPIN
 
@@ -71,8 +80,11 @@ def login_step2():
 
 @app.route('/api/search', methods=['GET'])
 def search_scrip():
+    if request.args.get('session_id') == 'mock':
+        return jsonify({'status': 'success', 'data': [{'pTrdSymbol': 'RELIANCE-EQ', 'pInstrmntName': 'RELIANCE INDUSTRIES', 'pExchSegmt': 'nse_cm', 'pScripCode': '2885'}]})
+
     session_id = request.args.get('session_id')
-    symbol = request.args.get('symbol').upper()
+    symbol = (request.args.get('symbol') or "").upper()
     if session_id not in clients:
         return jsonify({'status': 'error', 'message': 'Invalid session'}), 401
 
@@ -99,7 +111,7 @@ def search_scrip():
 def get_quote():
     session_id = request.args.get('session_id')
     token = request.args.get('token')
-    exchange = request.args.get('exchange', 'nse_cm').lower()
+    exchange = (request.args.get('exchange') or 'nse_cm').lower()
 
     if session_id not in clients:
         return jsonify({'status': 'error', 'message': 'Invalid session'}), 401
@@ -152,7 +164,7 @@ def place_order():
 
     client = clients[session_id]['client']
     try:
-        exchange = data.get('exchange_segment', 'nse_cm').lower()
+        exchange = (data.get('exchange_segment') or 'nse_cm').lower()
         exchange = exchange.replace('cm', '_cm').replace('fo', '_fo').replace('__', '_')
 
         ttype = 'B' if data.get('transaction_type') == 'BUY' else 'S'

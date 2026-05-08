@@ -305,7 +305,9 @@
                 <p>TRACK YOUR STOCKS & F&O</p>
             </div>
             <div v-if="watchlist.length === 0" class="empty-watchlist">
-                Your watchlist is empty. Search and add instruments.
+                <div style="font-size: 24px; margin-bottom: 10px;">🔍</div>
+                Your watchlist is empty.<br>
+                Use the <b>Search Instrument</b> bar in the right panel to find and <b>+ ADD</b> symbols.
             </div>
             <div v-else>
                 <div v-for="item in watchlist" :key="item.token" class="watchlist-item" @click="selectScrip(item, true)">
@@ -369,7 +371,7 @@
                 </div>
 
                 <div class="input-group search-container">
-                    <label>Search Instrument</label>
+                    <label>Search Instrument (Add to Watchlist)</label>
                     <input v-model="searchQuery" type="text" placeholder="TYPE SYMBOL (e.g. RELIANCE)" @input="debouncedSearch">
                     <div v-if="searchResults.length" class="results">
                         <div v-for="res in searchResults" :key="res.pScripCode" class="result-item" @click="selectScrip(res)">
