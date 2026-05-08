@@ -4,6 +4,7 @@ from neo_api_client import NeoAPI
 import os
 import pyotp
 import re
+import pandas as pd
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', os.urandom(24))
@@ -122,7 +123,9 @@ def search_scrip():
                 # 1. Try searching with base symbol
                 res = client.search_scrip(exchange_segment=segment, symbol=base_symbol)
                 data = []
-                if isinstance(res, dict) and 'data' in res:
+                if isinstance(res, pd.DataFrame):
+                    data = res.to_dict('records')
+                elif isinstance(res, dict) and 'data' in res:
                     data = res['data']
                 elif isinstance(res, list):
                     data = res
@@ -130,7 +133,9 @@ def search_scrip():
                 # 2. If nothing found, try with full query (sometimes works for stocks)
                 if not data and base_symbol != symbol_query:
                     res2 = client.search_scrip(exchange_segment=segment, symbol=symbol_query)
-                    if isinstance(res2, dict) and 'data' in res2:
+                    if isinstance(res2, pd.DataFrame):
+                        data = res2.to_dict('records')
+                    elif isinstance(res2, dict) and 'data' in res2:
                         data = res2['data']
                     elif isinstance(res2, list):
                         data = res2
@@ -173,10 +178,14 @@ def get_quote():
         inst_tokens = [{"instrument_token": str(token), "exchange_segment": exchange}]
         response = client.quotes(instrument_tokens=inst_tokens)
 
-        if isinstance(response, dict) and 'data' in response:
+        if isinstance(response, pd.DataFrame):
+            response = response.to_dict('records')
+        elif isinstance(response, dict) and 'data' in response:
             response = response['data']
-            if isinstance(response, list) and len(response) > 0:
-                response = response[0]
+
+        if isinstance(response, list) and len(response) > 0:
+            response = response[0]
+
         return jsonify({'status': 'success', 'data': response})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 400
@@ -209,7 +218,9 @@ def get_quotes():
             return jsonify({'status': 'success', 'data': []})
 
         response = client.quotes(instrument_tokens=inst_tokens)
-        if isinstance(response, dict) and 'data' in response:
+        if isinstance(response, pd.DataFrame):
+            response = response.to_dict('records')
+        elif isinstance(response, dict) and 'data' in response:
             response = response['data']
         return jsonify({'status': 'success', 'data': response})
     except Exception as e:
