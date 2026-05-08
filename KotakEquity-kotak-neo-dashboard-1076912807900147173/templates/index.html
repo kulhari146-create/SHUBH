@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Equity Order Terminal</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0f1115;
+            --card: #161a21;
+            --border: #242a35;
+            --primary: #3b82f6;
+            --success: #10b981;
+            --danger: #ef4444;
+            --text: #e2e8f0;
+            --text-muted: #94a3b8;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        [v-cloak] { display: none; }
+
+        .container {
+            width: 100%;
+            max-width: 900px;
+            padding: 20px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .container { grid-template-columns: 1fr; }
+        }
+
+        .terminal-card, .watchlist-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            height: fit-content;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+
+        .header h1 {
+            font-size: 18px;
+            font-weight: 800;
+            margin: 0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .header p {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin: 4px 0 0;
+            font-family: 'JetBrains Mono';
+        }
+
+        .input-group {
+            margin-bottom: 16px;
+        }
+
+        label {
+            display: block;
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+            text-transform: uppercase;
+        }
+
+        input, select {
+            width: 100%;
+            background: #0b0e13;
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+
+        input:focus {
+            border-color: var(--primary);
+            outline: none;
+        }
+
+        .search-container {
+            position: relative;
+        }
+
+        .results {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-top: none;
+            z-index: 100;
+            max-height: 200px;
+            overflow-y: auto;
+            border-bottom-left-radius: 6px;
+            border-bottom-right-radius: 6px;
+        }
+
+        .result-item {
+            padding: 10px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .result-item:hover {
+            background: #1c222d;
+        }
+
+        .result-item .symbol {
+            font-weight: 700;
+            font-size: 12px;
+        }
+
+        .result-item .name {
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+
+        .result-item .add-btn {
+            float: right;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 10px;
+            padding: 2px 6px;
+            cursor: pointer;
+        }
+
+        .watchlist-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .watchlist-item:hover { background: #1c222d; }
+
+        .watchlist-item .info .symbol { font-weight: 700; font-size: 13px; }
+        .watchlist-item .info .desc { font-size: 10px; color: var(--text-muted); }
+
+        .watchlist-item .price-info { text-align: right; }
+        .watchlist-item .price-info .ltp { font-weight: 700; font-size: 13px; font-family: 'JetBrains Mono'; }
+        .watchlist-item .price-info .chg { font-size: 10px; }
+        .watchlist-item .price-info .chg.up { color: var(--success); }
+        .watchlist-item .price-info .chg.down { color: var(--danger); }
+
+        .watchlist-item .remove-btn {
+            margin-left: 10px;
+            color: var(--text-muted);
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .watchlist-item:hover .remove-btn { opacity: 1; }
+        .watchlist-item .remove-btn:hover { color: var(--danger); }
+
+        .empty-watchlist {
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 12px;
+            padding: 40px 0;
+        }
+
+        .side-toggle {
+            display: flex;
+            background: #0b0e13;
+            border-radius: 6px;
+            padding: 4px;
+            margin-bottom: 16px;
+        }
+
+        .side-toggle button {
+            flex: 1;
+            border: none;
+            background: transparent;
+            color: var(--text-muted);
+            padding: 8px;
+            border-radius: 4px;
+            font-weight: 800;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .side-toggle button.active.buy { background: var(--success); color: white; }
+        .side-toggle button.active.sell { background: var(--danger); color: white; }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .amo-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 8px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .amo-toggle input {
+            width: auto;
+            margin: 0;
+            cursor: pointer;
+        }
+
+        .amo-toggle span {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .btn-submit {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-weight: 800;
+            font-size: 12px;
+            text-transform: uppercase;
+            cursor: pointer;
+            margin-top: 16px;
+            transition: opacity 0.2s;
+        }
+
+        .btn-submit:disabled { opacity: 0.3; cursor: not-allowed; }
+
+        .btn-buy { background: var(--success); }
+        .btn-sell { background: var(--danger); }
+
+        .error-box {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid var(--danger);
+            color: var(--danger);
+            font-size: 11px;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            text-align: center;
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 24px;
+            border-radius: 6px;
+            color: white;
+            font-weight: 600;
+            font-size: 12px;
+            z-index: 1000;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+
+        .notif-success { background: var(--success); }
+        .notif-error { background: var(--danger); }
+    </style>
+</head>
+<body>
+{% raw %}
+    <div id="app" v-cloak class="container">
+        <!-- Notification -->
+        <div v-if="notification" :class="'notification notif-' + notification.type">
+            {{ notification.message }}
+        </div>
+
+        <div class="watchlist-card" v-if="loggedIn">
+            <div class="header">
+                <h1>Watchlist</h1>
+                <p>TRACK YOUR STOCKS & F&O</p>
+            </div>
+            <div v-if="watchlist.length === 0" class="empty-watchlist">
+                Your watchlist is empty. Search and add instruments.
+            </div>
+            <div v-else>
+                <div v-for="item in watchlist" :key="item.token" class="watchlist-item" @click="selectScrip(item, true)">
+                    <div class="info">
+                        <div class="symbol">{{ item.symbol }}</div>
+                        <div class="desc">{{ item.exchange }} | {{ item.desc }}</div>
+                    </div>
+                    <div style="display: flex; align-items: center;">
+                        <div class="price-info">
+                            <div class="ltp">₹{{ item.ltp || '---' }}</div>
+                            <div :class="['chg', parseFloat(item.chg) >= 0 ? 'up' : 'down']">
+                                {{ item.chg ? (parseFloat(item.chg) >= 0 ? '+' : '') + item.chg + '%' : '' }}
+                            </div>
+                        </div>
+                        <div class="remove-btn" @click.stop="removeFromWatchlist(item.token)">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="terminal-card">
+            <div class="header">
+                <h1>{{ loggedIn ? 'Order Entry' : 'Login' }}</h1>
+                <p>KOTAK NEO API TERMINAL</p>
+            </div>
+
+            <div v-if="errorMessage" class="error-box">
+                {{ errorMessage }}
+            </div>
+
+            <!-- Login Section -->
+            <div v-if="!loggedIn">
+                <div v-if="loginStep === 1">
+                    <div class="input-group">
+                        <label>TOTP</label>
+                        <input v-model="loginForm.totp" type="text" placeholder="ENTER 6-DIGIT TOTP" maxlength="6" @keyup.enter="submitLoginStep1">
+                    </div>
+                    <button class="btn-submit btn-buy" @click="submitLoginStep1" :disabled="loading">
+                        {{ loading ? 'INITIALIZING...' : 'START SESSION' }}
+                    </button>
+                </div>
+
+                <div v-if="loginStep === 2">
+                    <div class="input-group">
+                        <label>MPIN</label>
+                        <input v-model="loginForm.mpin" type="password" placeholder="ENTER 4-DIGIT PIN" maxlength="4" @keyup.enter="submitLoginStep2">
+                    </div>
+                    <button class="btn-submit btn-buy" @click="submitLoginStep2" :disabled="loading">
+                        {{ loading ? 'AUTHORIZING...' : 'ENTER TERMINAL' }}
+                    </button>
+                </div>
+            </div>
+
+            <!-- Order Section -->
+            <div v-else>
+                <div class="side-toggle">
+                    <button :class="{ active: orderForm.transaction_type === 'BUY', buy: true }" @click="orderForm.transaction_type = 'BUY'">BUY</button>
+                    <button :class="{ active: orderForm.transaction_type === 'SELL', sell: true }" @click="orderForm.transaction_type = 'SELL'">SELL</button>
+                </div>
+
+                <div class="input-group search-container">
+                    <label>Search Instrument</label>
+                    <input v-model="searchQuery" type="text" placeholder="TYPE SYMBOL (e.g. RELIANCE)" @input="debouncedSearch">
+                    <div v-if="searchResults.length" class="results">
+                        <div v-for="res in searchResults" :key="res.pScripCode" class="result-item" @click="selectScrip(res)">
+                            <button class="add-btn" @click.stop="addToWatchlist(res)">+ ADD</button>
+                            <div class="symbol">{{ res.pTrdSymbol }}</div>
+                            <div class="name">{{ res.pInstrmntName }} | {{ res.pExchSegmt }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid">
+                    <div class="input-group">
+                        <label>Product</label>
+                        <select v-model="orderForm.product">
+                            <option value="CNC" v-if="orderForm.exchange_segment.includes('cm')">CNC</option>
+                            <option value="NRML" v-if="orderForm.exchange_segment.includes('fo')">NRML</option>
+                            <option value="MIS">MIS</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label>Type</label>
+                        <select v-model="orderForm.order_type">
+                            <option value="MKT">MARKET</option>
+                            <option value="L">LIMIT</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid">
+                    <div class="input-group">
+                        <label>Quantity</label>
+                        <input v-model.number="orderForm.quantity" type="number" min="1">
+                    </div>
+                    <div class="input-group">
+                        <label>Price</label>
+                        <input v-model.number="orderForm.price" type="number" step="0.05" :disabled="orderForm.order_type === 'MKT'">
+                    </div>
+                </div>
+
+                <label class="amo-toggle">
+                    <input v-model="orderForm.amo" type="checkbox">
+                    <span>After Market Order (AMO)</span>
+                </label>
+
+                <button :class="['btn-submit', orderForm.transaction_type === 'BUY' ? 'btn-buy' : 'btn-sell']"
+                        @click="placeOrder" :disabled="loading || !orderForm.trading_symbol">
+                    {{ loading ? 'EXECUTING...' : (orderForm.trading_symbol ? 'PLACE ' + orderForm.transaction_type + ' ORDER' : 'SEARCH & SELECT') }}
+                </button>
+            </div>
+        </div>
+    </div>
+{% endraw %}
+    <script>
+        const { createApp } = Vue;
+
+        window.app = createApp({
+            data() {
+                return {
+                    loggedIn: false,
+                    loginStep: 1,
+                    loading: false,
+                    sessionId: null,
+                    errorMessage: '',
+                    notification: null,
+                    loginForm: { totp: '', mpin: '' },
+                    hasDefaultMpin: false,
+                    searchQuery: '',
+                    searchResults: [],
+                    watchlist: JSON.parse(localStorage.getItem('watchlist') || '[]'),
+                    pollInterval: null,
+                    orderForm: {
+                        transaction_type: 'BUY',
+                        exchange_segment: 'nse_cm',
+                        product: 'CNC',
+                        trading_symbol: '',
+                        quantity: 1,
+                        price: 0,
+                        order_type: 'MKT',
+                        amo: false,
+                        token: ''
+                    }
+                }
+            },
+            created() {
+                this.loadConfig();
+                this.debouncedSearch = this.debounce(this.searchScrip, 300);
+            },
+            beforeUnmount() {
+                if (this.pollInterval) clearInterval(this.pollInterval);
+            },
+            methods: {
+                debounce(func, wait) {
+                    let timeout;
+                    return (...args) => {
+                        clearTimeout(timeout);
+                        timeout = setTimeout(() => func.apply(this, args), wait);
+                    };
+                },
+                async loadConfig() {
+                    const res = await fetch('/api/config');
+                    const data = await res.json();
+                    this.hasDefaultMpin = data.has_mpin;
+                },
+                async submitLoginStep1() {
+                    this.loading = true;
+                    this.errorMessage = '';
+                    try {
+                        const res = await fetch('/api/login/step1', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ totp: this.loginForm.totp })
+                        });
+                        const data = await res.json();
+                        if (data.status === 'success') {
+                            this.sessionId = data.session_id;
+                            this.loginStep = 2;
+                            if (this.hasDefaultMpin) this.submitLoginStep2();
+                        } else this.errorMessage = data.message;
+                    } catch (e) { this.errorMessage = 'Connection Error'; }
+                    finally { this.loading = false; }
+                },
+                async submitLoginStep2() {
+                    this.loading = true;
+                    this.errorMessage = '';
+                    try {
+                        const res = await fetch('/api/login/step2', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ session_id: this.sessionId, mpin: this.loginForm.mpin })
+                        });
+                        const data = await res.json();
+                        if (data.status === 'success') {
+                            this.loggedIn = true;
+                            this.startPolling();
+                        } else this.errorMessage = data.message;
+                    } catch (e) { this.errorMessage = 'Auth Error'; }
+                    finally { this.loading = false; }
+                },
+                startPolling() {
+                    this.updateWatchlistQuotes();
+                    this.pollInterval = setInterval(this.updateWatchlistQuotes, 5000);
+                },
+                async updateWatchlistQuotes() {
+                    if (!this.loggedIn || this.watchlist.length === 0) return;
+                    try {
+                        const res = await fetch('/api/quotes', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                session_id: this.sessionId,
+                                instruments: this.watchlist.map(i => ({ token: i.token, exchange: i.exchange }))
+                            })
+                        });
+                        const data = await res.json();
+                        if (data.status === 'success' && data.data) {
+                            const quotes = Array.isArray(data.data) ? data.data : [data.data];
+                            this.watchlist.forEach(item => {
+                                const q = quotes.find(q => q.instrument_token == item.token || q.token == item.token);
+                                if (q) {
+                                    item.ltp = q.last_traded_price || q.ltp;
+                                    item.chg = q.net_change_percentage || q.pc;
+                                }
+                            });
+                        }
+                    } catch (e) { console.error("Poll error", e); }
+                },
+                addToWatchlist(scrip) {
+                    if (this.watchlist.find(i => i.token === scrip.pScripCode)) return;
+                    this.watchlist.push({
+                        token: scrip.pScripCode,
+                        symbol: scrip.pTrdSymbol,
+                        exchange: scrip.pExchSegmt,
+                        desc: scrip.pInstrmntName,
+                        ltp: null,
+                        chg: null
+                    });
+                    localStorage.setItem('watchlist', JSON.stringify(this.watchlist));
+                    this.updateWatchlistQuotes();
+                },
+                removeFromWatchlist(token) {
+                    this.watchlist = this.watchlist.filter(i => i.token !== token);
+                    localStorage.setItem('watchlist', JSON.stringify(this.watchlist));
+                },
+                async searchScrip() {
+                    if (this.searchQuery.length < 2) return this.searchResults = [];
+                    const res = await fetch(`/api/search?session_id=${this.sessionId}&symbol=${this.searchQuery}`);
+                    const data = await res.json();
+                    if (data.status === 'success') this.searchResults = data.data || [];
+                },
+                async selectScrip(scrip, fromWatchlist = false) {
+                    if (fromWatchlist) {
+                        this.orderForm.trading_symbol = scrip.symbol;
+                        this.orderForm.exchange_segment = scrip.exchange;
+                        this.orderForm.token = scrip.token;
+                        this.searchQuery = scrip.symbol;
+                    } else {
+                        this.orderForm.trading_symbol = scrip.pTrdSymbol;
+                        this.orderForm.exchange_segment = scrip.pExchSegmt;
+                        this.orderForm.token = scrip.pScripCode;
+                        this.searchQuery = scrip.pTrdSymbol;
+                    }
+                    this.searchResults = [];
+
+                    // Set default product
+                    if (this.orderForm.exchange_segment.toLowerCase().includes('fo')) {
+                        this.orderForm.product = 'NRML';
+                    } else {
+                        this.orderForm.product = 'CNC';
+                    }
+
+                    const res = await fetch(`/api/quote?session_id=${this.sessionId}&token=${this.orderForm.token}&exchange=${this.orderForm.exchange_segment}`);
+                    const data = await res.json();
+                    if (data.status === 'success' && data.data) {
+                        const quote = Array.isArray(data.data) ? data.data[0] : data.data;
+                        if (quote) this.orderForm.price = parseFloat(quote.last_traded_price || quote.ltp) || 0;
+                    }
+                },
+                async placeOrder() {
+                    const action = this.orderForm.transaction_type;
+                    if (!confirm(`Confirm ${action} of ${this.orderForm.quantity} shares of ${this.orderForm.trading_symbol}?`)) return;
+
+                    this.loading = true;
+                    try {
+                        const res = await fetch('/api/place_order', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ session_id: this.sessionId, ...this.orderForm })
+                        });
+                        const data = await res.json();
+                        if (data.status === 'success') {
+                            this.showNotif('ORDER PLACED SUCCESSFULLY', 'success');
+                        } else this.showNotif('FAILED: ' + data.message, 'error');
+                    } catch (e) { this.showNotif('CRITICAL ERROR', 'error'); }
+                    finally { this.loading = false; }
+                },
+                showNotif(message, type) {
+                    this.notification = { message, type };
+                    setTimeout(() => this.notification = null, 5000);
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
